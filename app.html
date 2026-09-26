@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LightMath - honest room lighting sizer</title>
+<style>
+  :root { --bg:#12110c; --card:#1c1a13; --line:#332e20; --ink:#efe9da; --dim:#a89e88; --acc:#f4c95d; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:32px 18px 64px; }
+  .wrap { max-width:1060px; margin:0 auto; }
+  h1 { font-size:26px; letter-spacing:.5px; }
+  h1 span { color:var(--acc); }
+  .home { float:right; color:var(--dim); text-decoration:none; font-size:13px; margin-top:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin-top:20px; }
+  .card h2 { font-size:15px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:150px; }
+  label { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#14120c; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:9px 10px; font:inherit; }
+  .chk { display:flex; align-items:center; gap:8px; margin-top:24px; font-size:14px; color:var(--ink); }
+  .chk input { width:auto; }
+  button { background:var(--acc); color:#241b04; border:0; border-radius:9px; padding:10px 20px; font:600 15px system-ui; cursor:pointer; }
+  button.ghost { background:#14120c; color:var(--acc); border:1px solid var(--line); padding:8px 14px; font-size:13px; }
+  .err { color:#ff8a80; font-size:14px; margin-top:10px; min-height:20px; }
+  .note { color:var(--dim); font-size:12.5px; margin-top:10px; }
+  .verdict { background:#1a1508; border:1px solid #4a3d15; border-radius:12px; padding:18px 20px; margin-top:20px; font-size:16px; line-height:1.6; display:none; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:20px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .stat .v { font-size:22px; font-weight:700; }
+  .stat .k { color:var(--dim); font-size:12px; margin-top:4px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">home</a>
+  <h1>Light<span>Math</span></h1>
+
+  <div class="card">
+    <h2>The room</h2>
+    <div class="row">
+      <div><label>Room type</label><select id="room"></select></div>
+      <div><label>Length (m)</label><input id="len" type="number" value="5" min="1" max="30" step="0.1"></div>
+      <div><label>Width (m)</label><input id="wid" type="number" value="4" min="1" max="30" step="0.1"></div>
+      <div><label>Ceiling (m)</label><input id="ceil" type="number" value="2.5" min="2" max="6" step="0.1"></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="dark"> Dark walls, ceiling or floor (they swallow light)</label>
+  </div>
+
+  <div class="card">
+    <h2>Task lighting</h2>
+    <div class="row">
+      <div><label>Task zone</label><select id="task"></select></div>
+      <div><label>How many zones</label><input id="taskN" type="number" value="1" min="1" max="6"></div>
+    </div>
+    <div class="note">A task zone is a spot that needs its own light on the surface - a reading chair, a counter, a desk. Task lumens sit on top of the room's ambient need.</div>
+  </div>
+
+  <div class="card">
+    <h2>What you have now (optional)</h2>
+    <div class="row">
+      <div><label>Current total lumens</label><input id="cur" type="number" placeholder="leave blank to skip" min="0" step="50"></div>
+    </div>
+    <div class="note">Add up the lumens printed on your bulbs - a "60W-equivalent" LED is about 800 lm. Fill this in and LightMath grades your current setup.</div>
+  </div>
+
+  <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+    <button id="go">Size my lighting</button>
+    <button class="ghost" id="preset1">living room, cave</button>
+    <button class="ghost" id="preset2">kitchen, dark + counters</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="verdict" id="verdict"></div>
+
+  <div class="stats hidden" id="statsWrap">
+    <div class="stat"><div class="v" id="sTotal"></div><div class="k">lumens needed (ambient + task)</div></div>
+    <div class="stat"><div class="v" id="sAmb"></div><div class="k">ambient lumens after corrections</div></div>
+    <div class="stat"><div class="v" id="sBulb"></div><div class="k">ambient bulb plan</div></div>
+    <div class="stat"><div class="v" id="sTask"></div><div class="k">task lumens</div></div>
+    <div class="stat"><div class="v" id="sArea"></div><div class="k">room area at target lux</div></div>
+    <div class="stat"><div class="v" id="sBand"></div><div class="k">current setup verdict</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Why watts lie and lumens don't</h2>
+    <p style="font-size:14px;">
+      Bulbs used to be bought by watts because every 60W incandescent made the same light. LEDs made watts meaningless - only <b style="color:var(--acc)">lumens</b> count.
+      A room's need is <b style="color:var(--acc)">lux (light per square meter) times area</b>: 150 lux for a living room, 300 for a kitchen, 500 where you work.
+      Tall ceilings spread the same light thinner (+10% per 30 cm above 2.7 m) and dark surfaces absorb instead of bouncing (+25%).
+      Task spots like counters and desks need their own dedicated light on top - no ceiling fixture fixes a shadow you are standing in.
+    </p>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function(){
+  var roomSel = document.getElementById('room');
+  Object.keys(LightMathEngine.ROOMS).forEach(function(k){
+    var o = document.createElement('option');
+    o.value = k; o.textContent = LightMathEngine.ROOMS[k].label + ' (' + LightMathEngine.ROOMS[k].lux + ' lux)';
+    roomSel.appendChild(o);
+  });
+  var taskSel = document.getElementById('task');
+  Object.keys(LightMathEngine.TASKS).forEach(function(k){
+    var o = document.createElement('option');
+    o.value = k; o.textContent = LightMathEngine.TASKS[k].label + (LightMathEngine.TASKS[k].lux ? ' (+' + LightMathEngine.TASKS[k].lux + ' lux)' : '');
+    taskSel.appendChild(o);
+  });
+
+  function setVals(v){
+    document.getElementById('room').value = v.room;
+    document.getElementById('len').value = v.len;
+    document.getElementById('wid').value = v.wid;
+    document.getElementById('ceil').value = v.ceil;
+    document.getElementById('dark').checked = v.dark;
+    document.getElementById('task').value = v.task;
+    document.getElementById('taskN').value = v.taskN;
+    document.getElementById('cur').value = v.cur;
+  }
+  document.getElementById('preset1').addEventListener('click', function(){
+    setVals({ room:'living', len:6, wid:5, ceil:2.5, dark:false, task:'reading', taskN:1, cur:900 });
+  });
+  document.getElementById('preset2').addEventListener('click', function(){
+    setVals({ room:'kitchen', len:4, wid:3.5, ceil:2.6, dark:true, task:'cooking', taskN:2, cur:1600 });
+  });
+
+  document.getElementById('go').addEventListener('click', function(){
+    var errEl = document.getElementById('err'); errEl.textContent = '';
+    var input = {
+      room: document.getElementById('room').value,
+      lengthM: document.getElementById('len').value,
+      widthM: document.getElementById('wid').value,
+      ceilingM: document.getElementById('ceil').value,
+      dark: document.getElementById('dark').checked,
+      task: document.getElementById('task').value,
+      taskCount: document.getElementById('taskN').value,
+      currentLumens: document.getElementById('cur').value
+    };
+    var r;
+    try { r = LightMathEngine.analyze(input); } catch(e){ errEl.textContent = e.message; return; }
+    var fmt = function(n){ return n.toLocaleString() + ' lm'; };
+    document.getElementById('sTotal').textContent = fmt(r.totalLm);
+    document.getElementById('sAmb').textContent = fmt(r.ambientLm);
+    document.getElementById('sBulb').textContent = r.bulbPick.count + ' x ' + r.bulbPick.lumensEach + ' lm';
+    document.getElementById('sTask').textContent = r.taskLm ? fmt(r.taskLm) : 'none';
+    document.getElementById('sArea').textContent = r.area + ' m2 @ ' + r.luxTarget + ' lux';
+    document.getElementById('sBand').textContent = r.verdictBand;
+    document.getElementById('statsWrap').classList.remove('hidden');
+    var v = document.getElementById('verdict');
+    v.innerHTML = r.verdict.replace(/(cave|dim|balanced|over-lit|\d[\d,]* lumens|\d+ x [\dW-equiv ()a-z]+)/g, '<b>$1</b>');
+    v.style.display = 'block';
+  });
+})();
+</script>
+</body>
+</html>
